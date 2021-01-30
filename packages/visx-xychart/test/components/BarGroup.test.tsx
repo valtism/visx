@@ -1,7 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { animated } from 'react-spring';
 import { mount } from 'enzyme';
-import { AnimatedBarGroup, BarGroup, BarSeries, DataProvider, useEventEmitter } from '../../src';
+import {
+  AnimatedBarGroup,
+  BarGroup,
+  BarSeries,
+  DataContext,
+  DataProvider,
+  useEventEmitter,
+} from '../../src';
 import setupTooltipTest from '../mocks/setupTooltipTest';
 import { XYCHART_EVENT_SOURCE } from '../../src/constants';
 
@@ -59,6 +66,28 @@ describe('<BarGroup />', () => {
     expect(wrapper.find('rect')).toHaveLength(4);
   });
 
+  it('should use colorAccessor if passed', () => {
+    const wrapper = mount(
+      <DataProvider {...providerProps}>
+        <svg>
+          <BarGroup>
+            <BarSeries dataKey={series1.key} {...series1} />
+            <BarSeries
+              dataKey={series2.key}
+              {...series2}
+              colorAccessor={(_, i) => (i === 0 ? 'banana' : null)}
+            />
+          </BarGroup>
+        </svg>
+      </DataProvider>,
+    );
+    const rects = wrapper.find('rect');
+    expect(rects.at(0).prop('fill')).not.toBe('banana');
+    expect(rects.at(1).prop('fill')).not.toBe('banana');
+    expect(rects.at(2).prop('fill')).toBe('banana');
+    expect(rects.at(3).prop('fill')).not.toBe('banana');
+  });
+
   it('should not render rects with invalid x or y', () => {
     const wrapper = mount(
       <DataProvider {...providerProps}>
@@ -81,9 +110,11 @@ describe('<BarGroup />', () => {
 
     const EventEmitter = () => {
       const emit = useEventEmitter();
+      const { yScale } = useContext(DataContext);
 
       useEffect(() => {
-        if (emit) {
+        // checking for yScale ensures stack data is registered and stacks are rendered
+        if (emit && yScale) {
           // @ts-ignore not a React.MouseEvent
           emit('pointermove', new MouseEvent('pointermove'), XYCHART_EVENT_SOURCE);
           expect(showTooltip).toHaveBeenCalledTimes(2); // one per key

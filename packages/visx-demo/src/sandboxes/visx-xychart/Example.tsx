@@ -1,22 +1,6 @@
 import React from 'react';
 import { CityTemperature } from '@visx/mock-data/lib/mocks/cityTemperature';
-import {
-  AnimatedAnnotation,
-  AnimatedAreaSeries,
-  AnimatedAxis,
-  AnimatedBarGroup,
-  AnimatedBarSeries,
-  AnimatedBarStack,
-  AnimatedGlyphSeries,
-  AnimatedGrid,
-  AnimatedLineSeries,
-  AnnotationCircleSubject,
-  AnnotationConnector,
-  AnnotationLabel,
-  AnnotationLineSubject,
-  Tooltip,
-  XYChart,
-} from '@visx/xychart';
+
 import ExampleControls from './ExampleControls';
 import CustomChartBackground from './CustomChartBackground';
 
@@ -37,12 +21,14 @@ export default function Example({ height }: XYChartProps) {
         annotationDatum,
         annotationLabelPosition,
         annotationType,
+        colorAccessorFactory,
         config,
         curve,
         data,
         editAnnotationLabelPosition,
         numTicks,
         renderAreaSeries,
+        renderAreaStack,
         renderBarGroup,
         renderBarSeries,
         renderBarStack,
@@ -61,9 +47,28 @@ export default function Example({ height }: XYChartProps) {
         showVerticalCrosshair,
         snapTooltipToDatumX,
         snapTooltipToDatumY,
+        stackOffset,
         theme,
         xAxisOrientation,
         yAxisOrientation,
+
+        // components are animated or not depending on selection
+        Annotation,
+        AreaSeries,
+        AreaStack,
+        Axis,
+        BarGroup,
+        BarSeries,
+        BarStack,
+        GlyphSeries,
+        Grid,
+        LineSeries,
+        AnnotationCircleSubject,
+        AnnotationConnector,
+        AnnotationLabel,
+        AnnotationLineSubject,
+        Tooltip,
+        XYChart,
       }) => (
         <XYChart
           theme={theme}
@@ -77,7 +82,7 @@ export default function Example({ height }: XYChartProps) {
           }}
         >
           <CustomChartBackground />
-          <AnimatedGrid
+          <Grid
             key={`grid-${animationTrajectory}`} // force animate on update
             rows={showGridRows}
             columns={showGridColumns}
@@ -85,60 +90,64 @@ export default function Example({ height }: XYChartProps) {
             numTicks={numTicks}
           />
           {renderBarStack && (
-            <AnimatedBarStack>
-              <AnimatedBarSeries
+            <BarStack offset={stackOffset}>
+              <BarSeries
                 dataKey="New York"
                 data={data}
                 xAccessor={accessors.x['New York']}
                 yAccessor={accessors.y['New York']}
               />
-              <AnimatedBarSeries
+              <BarSeries
                 dataKey="San Francisco"
                 data={data}
                 xAccessor={accessors.x['San Francisco']}
                 yAccessor={accessors.y['San Francisco']}
               />
-              <AnimatedBarSeries
+              <BarSeries
                 dataKey="Austin"
                 data={data}
                 xAccessor={accessors.x.Austin}
                 yAccessor={accessors.y.Austin}
               />
-            </AnimatedBarStack>
+            </BarStack>
           )}
           {renderBarGroup && (
-            <AnimatedBarGroup>
-              <AnimatedBarSeries
+            <BarGroup>
+              <BarSeries
                 dataKey="New York"
                 data={data}
                 xAccessor={accessors.x['New York']}
                 yAccessor={accessors.y['New York']}
+                colorAccessor={colorAccessorFactory('New York')}
               />
-              <AnimatedBarSeries
+              <BarSeries
                 dataKey="San Francisco"
                 data={data}
                 xAccessor={accessors.x['San Francisco']}
                 yAccessor={accessors.y['San Francisco']}
+                colorAccessor={colorAccessorFactory('San Francisco')}
               />
-              <AnimatedBarSeries
+              <BarSeries
                 dataKey="Austin"
                 data={data}
                 xAccessor={accessors.x.Austin}
                 yAccessor={accessors.y.Austin}
+                colorAccessor={colorAccessorFactory('Austin')}
               />
-            </AnimatedBarGroup>
+            </BarGroup>
           )}
           {renderBarSeries && (
-            <AnimatedBarSeries
+            <BarSeries
               dataKey="New York"
               data={data}
               xAccessor={accessors.x['New York']}
               yAccessor={accessors.y['New York']}
+              colorAccessor={colorAccessorFactory('New York')}
             />
           )}
           {renderAreaSeries && (
             <>
-              <AnimatedAreaSeries
+              <AreaSeries
                 dataKey="Austin"
                 data={data}
                 xAccessor={accessors.x.Austin}
@@ -146,17 +155,15 @@ export default function Example({ height }: XYChartProps) {
                 fillOpacity={0.4}
                 curve={curve}
               />
-              {!renderBarSeries && (
-                <AnimatedAreaSeries
-                  dataKey="New York"
-                  data={data}
-                  xAccessor={accessors.x['New York']}
-                  yAccessor={accessors.y['New York']}
-                  fillOpacity={0.4}
-                  curve={curve}
-                />
-              )}
-              <AnimatedAreaSeries
+              <AreaSeries
+                dataKey="New York"
+                data={data}
+                xAccessor={accessors.x['New York']}
+                yAccessor={accessors.y['New York']}
+                fillOpacity={0.4}
+                curve={curve}
+              />
+              <AreaSeries
                 dataKey="San Francisco"
                 data={data}
                 xAccessor={accessors.x['San Francisco']}
@@ -166,9 +173,34 @@ export default function Example({ height }: XYChartProps) {
               />
             </>
           )}
+          {renderAreaStack && (
+            <AreaStack curve={curve} offset={stackOffset} renderLine={stackOffset !== 'wiggle'}>
+              <AreaSeries
+                dataKey="Austin"
+                data={data}
+                xAccessor={accessors.x.Austin}
+                yAccessor={accessors.y.Austin}
+                fillOpacity={0.4}
+              />
+              <AreaSeries
+                dataKey="New York"
+                data={data}
+                xAccessor={accessors.x['New York']}
+                yAccessor={accessors.y['New York']}
+                fillOpacity={0.4}
+              />
+              <AreaSeries
+                dataKey="San Francisco"
+                data={data}
+                xAccessor={accessors.x['San Francisco']}
+                yAccessor={accessors.y['San Francisco']}
+                fillOpacity={0.4}
+              />
+            </AreaStack>
+          )}
           {renderLineSeries && (
             <>
-              <AnimatedLineSeries
+              <LineSeries
                 dataKey="Austin"
                 data={data}
                 xAccessor={accessors.x.Austin}
@@ -176,7 +208,7 @@ export default function Example({ height }: XYChartProps) {
                 curve={curve}
               />
               {!renderBarSeries && (
-                <AnimatedLineSeries
+                <LineSeries
                   dataKey="New York"
                   data={data}
                   xAccessor={accessors.x['New York']}
@@ -184,7 +216,7 @@ export default function Example({ height }: XYChartProps) {
                   curve={curve}
                 />
               )}
-              <AnimatedLineSeries
+              <LineSeries
                 dataKey="San Francisco"
                 data={data}
                 xAccessor={accessors.x['San Francisco']}
@@ -194,29 +226,38 @@ export default function Example({ height }: XYChartProps) {
             </>
           )}
           {renderGlyphSeries && (
-            <AnimatedGlyphSeries
+            <GlyphSeries
               dataKey="San Francisco"
               data={data}
               xAccessor={accessors.x['San Francisco']}
               yAccessor={accessors.y['San Francisco']}
               renderGlyph={renderGlyph}
+              colorAccessor={colorAccessorFactory('San Francisco')}
             />
           )}
-          <AnimatedAxis
+          <Axis
             key={`time-axis-${animationTrajectory}-${renderHorizontally}`}
             orientation={renderHorizontally ? yAxisOrientation : xAxisOrientation}
             numTicks={numTicks}
             animationTrajectory={animationTrajectory}
           />
-          <AnimatedAxis
+          <Axis
             key={`temp-axis-${animationTrajectory}-${renderHorizontally}`}
-            label="Temperature (°F)"
+            label={
+              stackOffset == null
+                ? 'Temperature (°F)'
+                : stackOffset === 'expand'
+                ? 'Fraction of total temperature'
+                : ''
+            }
             orientation={renderHorizontally ? xAxisOrientation : yAxisOrientation}
             numTicks={numTicks}
             animationTrajectory={animationTrajectory}
+            // values don't make sense in stream graph
+            tickFormat={stackOffset === 'wiggle' ? () => '' : undefined}
           />
           {annotationDataKey && annotationDatum && (
-            <AnimatedAnnotation
+            <Annotation
               dataKey={annotationDataKey}
               datum={annotationDatum}
               dx={annotationLabelPosition.dx}
@@ -241,7 +282,7 @@ export default function Example({ height }: XYChartProps) {
                   fillOpacity: 0.8,
                 }}
               />
-            </AnimatedAnnotation>
+            </Annotation>
           )}
           {showTooltip && (
             <Tooltip<CityTemperature>

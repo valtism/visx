@@ -2,12 +2,15 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 import React, { useCallback, useMemo, useState } from 'react';
 import { lightTheme, darkTheme, XYChartTheme } from '@visx/xychart';
+import { PatternLines } from '@visx/pattern';
 import { GlyphProps } from '@visx/xychart/lib/types';
 import { AnimationTrajectory } from '@visx/react-spring/lib/types';
 import cityTemperature, { CityTemperature } from '@visx/mock-data/lib/mocks/cityTemperature';
 import { GlyphCross, GlyphDot, GlyphStar } from '@visx/glyph';
 import { curveLinear, curveStep, curveCardinal } from '@visx/curve';
 import customTheme from './customTheme';
+import userPrefersReducedMotion from './userPrefersReducedMotion';
+import getAnimatedOrUnanimatedComponents from './getAnimatedOrUnanimatedComponents';
 
 const dateScaleConfig = { type: 'band', paddingInner: 0.3 } as const;
 const temperatureScaleConfig = { type: 'linear' } as const;
@@ -26,6 +29,7 @@ const getNegativeSfTemperature = (d: CityTemperature) => -getSfTemperature(d);
 const getNyTemperature = (d: CityTemperature) => Number(d['New York']);
 const getAustinTemperature = (d: CityTemperature) => Number(d.Austin);
 const defaultAnnotationDataIndex = 13;
+const selectedDatumPatternId = 'xychart-selected-datum';
 
 type Accessor = (d: CityTemperature) => number | string;
 
@@ -35,6 +39,8 @@ interface Accessors {
   Austin: Accessor;
 }
 
+type DataKey = keyof Accessors;
+
 type SimpleScaleConfig = { type: 'band' | 'linear'; paddingInner?: number };
 
 type ProvidedProps = {
@@ -43,11 +49,12 @@ type ProvidedProps = {
     y: Accessors;
     date: Accessor;
   };
-  animationTrajectory: AnimationTrajectory;
-  annotationDataKey: keyof Accessors | null;
+  animationTrajectory?: AnimationTrajectory;
+  annotationDataKey: DataKey | null;
   annotationDatum?: CityTemperature;
   annotationLabelPosition: { dx: number; dy: number };
   annotationType?: 'line' | 'circle';
+  colorAccessorFactory: (key: DataKey) => (d: CityTemperature) => string | null;
   config: {
     x: SimpleScaleConfig;
     y: SimpleScaleConfig;
@@ -57,9 +64,10 @@ type ProvidedProps = {
   editAnnotationLabelPosition: boolean;
   numTicks: number;
   setAnnotationDataIndex: (index: number) => void;
-  setAnnotationDataKey: (key: keyof Accessors | null) => void;
+  setAnnotationDataKey: (key: DataKey | null) => void;
   setAnnotationLabelPosition: (position: { dx: number; dy: number }) => void;
   renderAreaSeries: boolean;
+  renderAreaStack: boolean;
   renderBarGroup: boolean;
   renderBarSeries: boolean;
   renderBarStack: boolean;
@@ -75,18 +83,22 @@ type ProvidedProps = {
   showVerticalCrosshair: boolean;
   snapTooltipToDatumX: boolean;
   snapTooltipToDatumY: boolean;
+  stackOffset?: 'wiggle' | 'expand' | 'diverging' | 'silhouette';
   theme: XYChartTheme;
   xAxisOrientation: 'top' | 'bottom';
   yAxisOrientation: 'left' | 'right';
-};
+} & ReturnType<typeof getAnimatedOrUnanimatedComponents>;
 
 type ControlsProps = {
   children: (props: ProvidedProps) => React.ReactNode;
 };
 
 export default function ExampleControls({ children }: ControlsProps) {
+  const [useAnimatedComponents, setUseAnimatedComponents] = useState(!userPrefersReducedMotion());
   const [theme, setTheme] = useState<XYChartTheme>(darkTheme);
-  const [animationTrajectory, setAnimationTrajectory] = useState<AnimationTrajectory>('center');
+  const [animationTrajectory, setAnimationTrajectory] = useState<AnimationTrajectory | undefined>(
+    'center',
+  );
   const [gridProps, setGridProps] = useState<[boolean, boolean]>([false, false]);
   const [showGridRows, showGridColumns] = gridProps;
   const [xAxisOrientation, setXAxisOrientation] = useState<'top' | 'bottom'>('bottom');
@@ -103,11 +115,12 @@ export default function ExampleControls({ children }: ControlsProps) {
   const [snapTooltipToDatumY, setSnapTooltipToDatumY] = useState(true);
   const [sharedTooltip, setSharedTooltip] = useState(true);
   const [renderBarStackOrGroup, setRenderBarStackOrGroup] = useState<
-    'bar' | 'stack' | 'group' | 'none'
+    'bar' | 'barstack' | 'bargroup' | 'none'
   >('none');
-  const [renderLineOrAreaSeries, setRenderLineOrAreaSeries] = useState<'line' | 'area' | 'none'>(
-    'area',
-  );
+  const [renderAreaLineOrStack, setRenderAreaLineOrStack] = useState<
+    'line' | 'area' | 'areastack' | 'none'
+  >('areastack');
+  const [stackOffset, setStackOffset] = useState<ProvidedProps['stackOffset']>();
   const [renderGlyphSeries, setRenderGlyphSeries] = useState(false);
   const [editAnnotationLabelPosition, setEditAnnotationLabelPosition] = useState(false);
   const [annotationLabelPosition, setAnnotationLabelPosition] = useState({ dx: -40, dy: -20 });
@@ -117,18 +130,18 @@ export default function ExampleControls({ children }: ControlsProps) {
   const [missingValues, setMissingValues] = useState(false);
   const [glyphComponent, setGlyphComponent] = useState<'star' | 'cross' | 'circle' | '🍍'>('star');
   const [curveType, setCurveType] = useState<'linear' | 'cardinal' | 'step'>('linear');
-  const themeBackground = theme.backgroundColor;
+  const glyphOutline = theme.gridStyles.stroke;
   const renderGlyph = useCallback(
     ({ size, color, onPointerMove, onPointerOut, onPointerUp }: GlyphProps<CityTemperature>) => {
       const handlers = { onPointerMove, onPointerOut, onPointerUp };
       if (glyphComponent === 'star') {
-        return <GlyphStar stroke={themeBackground} fill={color} size={size * 8} {...handlers} />;
+        return <GlyphStar stroke={glyphOutline} fill={color} size={size * 10} {...handlers} />;
       }
       if (glyphComponent === 'circle') {
-        return <GlyphDot stroke={themeBackground} fill={color} r={size / 2} {...handlers} />;
+        return <GlyphDot stroke={glyphOutline} fill={color} r={size / 2} {...handlers} />;
       }
       if (glyphComponent === 'cross') {
-        return <GlyphCross stroke={themeBackground} fill={color} size={size * 8} {...handlers} />;
+        return <GlyphCross stroke={glyphOutline} fill={color} size={size * 10} {...handlers} />;
       }
       return (
         <text dx="-0.75em" dy="0.25em" fontSize={14} {...handlers}>
@@ -136,7 +149,15 @@ export default function ExampleControls({ children }: ControlsProps) {
         </text>
       );
     },
-    [glyphComponent, themeBackground],
+    [glyphComponent, glyphOutline],
+  );
+  // for series that support it, return a colorAccessor which returns a custom color if the datum is selected
+  const colorAccessorFactory = useCallback(
+    (dataKey: DataKey) => (d: CityTemperature) =>
+      annotationDataKey === dataKey && d === data[annotationDataIndex]
+        ? `url(#${selectedDatumPatternId})`
+        : null,
+    [annotationDataIndex, annotationDataKey],
   );
 
   const accessors = useMemo(
@@ -172,7 +193,9 @@ export default function ExampleControls({ children }: ControlsProps) {
     [renderHorizontally],
   );
 
-  const canRenderLineOrArea = renderBarStackOrGroup === 'bar' || renderBarStackOrGroup === 'none';
+  // cannot snap to a stack position
+  const canSnapTooltipToDatum =
+    renderBarStackOrGroup !== 'barstack' && renderAreaLineOrStack !== 'areastack';
 
   return (
     <>
@@ -183,6 +206,7 @@ export default function ExampleControls({ children }: ControlsProps) {
         annotationDatum: data[annotationDataIndex],
         annotationLabelPosition,
         annotationType,
+        colorAccessorFactory,
         config,
         curve:
           (curveType === 'cardinal' && curveCardinal) ||
@@ -197,14 +221,15 @@ export default function ExampleControls({ children }: ControlsProps) {
           : data,
         editAnnotationLabelPosition,
         numTicks,
-        renderBarGroup: renderBarStackOrGroup === 'group',
+        renderBarGroup: renderBarStackOrGroup === 'bargroup',
         renderBarSeries: renderBarStackOrGroup === 'bar',
-        renderBarStack: renderBarStackOrGroup === 'stack',
+        renderBarStack: renderBarStackOrGroup === 'barstack',
         renderGlyphSeries,
         renderGlyph,
         renderHorizontally,
-        renderAreaSeries: canRenderLineOrArea && renderLineOrAreaSeries === 'area',
-        renderLineSeries: canRenderLineOrArea && renderLineOrAreaSeries === 'line',
+        renderAreaSeries: renderAreaLineOrStack === 'area',
+        renderAreaStack: renderAreaLineOrStack === 'areastack',
+        renderLineSeries: renderAreaLineOrStack === 'line',
         setAnnotationDataIndex,
         setAnnotationDataKey,
         setAnnotationLabelPosition,
@@ -214,12 +239,25 @@ export default function ExampleControls({ children }: ControlsProps) {
         showHorizontalCrosshair,
         showTooltip,
         showVerticalCrosshair,
-        snapTooltipToDatumX: renderBarStackOrGroup !== 'stack' && snapTooltipToDatumX,
-        snapTooltipToDatumY: renderBarStackOrGroup !== 'stack' && snapTooltipToDatumY,
+        snapTooltipToDatumX: canSnapTooltipToDatum && snapTooltipToDatumX,
+        snapTooltipToDatumY: canSnapTooltipToDatum && snapTooltipToDatumY,
+        stackOffset,
         theme,
         xAxisOrientation,
         yAxisOrientation,
+        ...getAnimatedOrUnanimatedComponents(useAnimatedComponents),
       })}
+      {/** This style is used for annotated elements via colorAccessor. */}
+      <svg className="pattern-lines">
+        <PatternLines
+          id={selectedDatumPatternId}
+          width={6}
+          height={6}
+          orientation={['diagonalRightToLeft']}
+          stroke={theme?.axisStyles.x.bottom.axisLine.stroke}
+          strokeWidth={1.5}
+        />
+      </svg>
       <div className="controls">
         {/** data */}
         <div>
@@ -307,27 +345,45 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea}
-              onChange={() => setRenderLineOrAreaSeries('line')}
-              checked={canRenderLineOrArea && renderLineOrAreaSeries === 'line'}
+              onChange={() => {
+                if (renderBarStackOrGroup === 'barstack' || renderBarStackOrGroup === 'bargroup') {
+                  setRenderBarStackOrGroup('none');
+                }
+                setRenderAreaLineOrStack('line');
+              }}
+              checked={renderAreaLineOrStack === 'line'}
             />
             line
           </label>
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea}
-              onChange={() => setRenderLineOrAreaSeries('area')}
-              checked={canRenderLineOrArea && renderLineOrAreaSeries === 'area'}
+              onChange={() => {
+                if (renderBarStackOrGroup === 'barstack' || renderBarStackOrGroup === 'bargroup') {
+                  setRenderBarStackOrGroup('none');
+                }
+                setRenderAreaLineOrStack('area');
+              }}
+              checked={renderAreaLineOrStack === 'area'}
             />
             area
           </label>
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea}
-              onChange={() => setRenderLineOrAreaSeries('none')}
-              checked={renderLineOrAreaSeries === 'none' || !canRenderLineOrArea}
+              onChange={() => {
+                setRenderBarStackOrGroup('none');
+                setRenderAreaLineOrStack('areastack');
+              }}
+              checked={renderAreaLineOrStack === 'areastack'}
+            />
+            area stack
+          </label>
+          <label>
+            <input
+              type="radio"
+              onChange={() => setRenderAreaLineOrStack('none')}
+              checked={renderAreaLineOrStack === 'none'}
             />
             none
           </label>
@@ -336,7 +392,7 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea || renderLineOrAreaSeries === 'none'}
+              disabled={renderAreaLineOrStack === 'none'}
               onChange={() => setCurveType('linear')}
               checked={curveType === 'linear'}
             />
@@ -345,7 +401,7 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea || renderLineOrAreaSeries === 'none'}
+              disabled={renderAreaLineOrStack === 'none'}
               onChange={() => setCurveType('cardinal')}
               checked={curveType === 'cardinal'}
             />
@@ -354,7 +410,7 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              disabled={!canRenderLineOrArea || renderLineOrAreaSeries === 'none'}
+              disabled={renderAreaLineOrStack === 'none'}
               onChange={() => setCurveType('step')}
               checked={curveType === 'step'}
             />
@@ -415,7 +471,12 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              onChange={() => setRenderBarStackOrGroup('bar')}
+              onChange={() => {
+                if (renderAreaLineOrStack === 'areastack') {
+                  setRenderAreaLineOrStack('none');
+                }
+                setRenderBarStackOrGroup('bar');
+              }}
               checked={renderBarStackOrGroup === 'bar'}
             />
             bar
@@ -423,16 +484,22 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="radio"
-              onChange={() => setRenderBarStackOrGroup('stack')}
-              checked={renderBarStackOrGroup === 'stack'}
+              onChange={() => {
+                setRenderAreaLineOrStack('none');
+                setRenderBarStackOrGroup('barstack');
+              }}
+              checked={renderBarStackOrGroup === 'barstack'}
             />
             bar stack
           </label>
           <label>
             <input
               type="radio"
-              onChange={() => setRenderBarStackOrGroup('group')}
-              checked={renderBarStackOrGroup === 'group'}
+              onChange={() => {
+                setRenderAreaLineOrStack('none');
+                setRenderBarStackOrGroup('bargroup');
+              }}
+              checked={renderBarStackOrGroup === 'bargroup'}
             />
             bar group
           </label>
@@ -443,6 +510,42 @@ export default function ExampleControls({ children }: ControlsProps) {
               checked={renderBarStackOrGroup === 'none'}
             />
             none
+          </label>
+        </div>
+        <div>
+          <strong>stack series offset</strong>
+          <label>
+            <input
+              type="radio"
+              disabled={
+                renderAreaLineOrStack !== 'areastack' && renderBarStackOrGroup !== 'barstack'
+              }
+              onChange={() => setStackOffset(undefined)}
+              checked={stackOffset == null}
+            />
+            auto (zero-baseline)
+          </label>
+          <label>
+            <input
+              type="radio"
+              disabled={
+                renderAreaLineOrStack !== 'areastack' && renderBarStackOrGroup !== 'barstack'
+              }
+              onChange={() => setStackOffset('expand')}
+              checked={stackOffset === 'expand'}
+            />
+            expand (values sum to 1)
+          </label>
+          <label>
+            <input
+              type="radio"
+              disabled={
+                renderAreaLineOrStack !== 'areastack' && renderBarStackOrGroup !== 'barstack'
+              }
+              onChange={() => setStackOffset('wiggle')}
+              checked={stackOffset === 'wiggle'}
+            />
+            wiggle (stream graph)
           </label>
         </div>
 
@@ -461,7 +564,7 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="checkbox"
-              disabled={!showTooltip || renderBarStackOrGroup === 'stack'}
+              disabled={!showTooltip || !canSnapTooltipToDatum}
               onChange={() => setSnapTooltipToDatumX(!snapTooltipToDatumX)}
               checked={showTooltip && snapTooltipToDatumX}
             />
@@ -470,7 +573,7 @@ export default function ExampleControls({ children }: ControlsProps) {
           <label>
             <input
               type="checkbox"
-              disabled={!showTooltip || renderBarStackOrGroup === 'stack'}
+              disabled={!showTooltip || !canSnapTooltipToDatum}
               onChange={() => setSnapTooltipToDatumY(!snapTooltipToDatumY)}
               checked={showTooltip && snapTooltipToDatumY}
             />
@@ -646,39 +749,53 @@ export default function ExampleControls({ children }: ControlsProps) {
         </div>
         {/** animation trajectory */}
         <div>
-          <strong>axis + grid animation</strong>
           <label>
             <input
-              type="radio"
-              onChange={() => setAnimationTrajectory('center')}
-              checked={animationTrajectory === 'center'}
+              type="checkbox"
+              onChange={() => setUseAnimatedComponents(!useAnimatedComponents)}
+              checked={useAnimatedComponents}
             />
-            from center
+            use animated components
           </label>
-          <label>
-            <input
-              type="radio"
-              onChange={() => setAnimationTrajectory('outside')}
-              checked={animationTrajectory === 'outside'}
-            />
-            from outside
-          </label>
-          <label>
-            <input
-              type="radio"
-              onChange={() => setAnimationTrajectory('min')}
-              checked={animationTrajectory === 'min'}
-            />
-            from min
-          </label>
-          <label>
-            <input
-              type="radio"
-              onChange={() => setAnimationTrajectory('max')}
-              checked={animationTrajectory === 'max'}
-            />
-            from max
-          </label>
+
+          {useAnimatedComponents && (
+            <>
+              &nbsp;&nbsp;&nbsp;
+              <strong>axis + grid animation</strong>
+              <label>
+                <input
+                  type="radio"
+                  onChange={() => setAnimationTrajectory('center')}
+                  checked={animationTrajectory === 'center'}
+                />
+                from center
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  onChange={() => setAnimationTrajectory('outside')}
+                  checked={animationTrajectory === 'outside'}
+                />
+                from outside
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  onChange={() => setAnimationTrajectory('min')}
+                  checked={animationTrajectory === 'min'}
+                />
+                from min
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  onChange={() => setAnimationTrajectory('max')}
+                  checked={animationTrajectory === 'max'}
+                />
+                from max
+              </label>
+            </>
+          )}
         </div>
       </div>
       <style jsx>{`
@@ -694,6 +811,11 @@ export default function ExampleControls({ children }: ControlsProps) {
         }
         input[type='radio'] {
           height: 10px;
+        }
+        .pattern-lines {
+          position: absolute;
+          pointer-events: none;
+          opacity: 0;
         }
       `}</style>
     </>
