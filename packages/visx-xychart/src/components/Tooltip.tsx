@@ -1,4 +1,4 @@
-import React, { useCallback, useContext } from 'react';
+import React, { useCallback, useContext, useEffect, useRef } from 'react';
 import { useTooltipInPortal, defaultStyles } from '@visx/tooltip';
 import { TooltipProps as BaseTooltipProps } from '@visx/tooltip/lib/tooltips/Tooltip';
 import { PickD3Scale } from '@visx/scale';
@@ -8,6 +8,7 @@ import TooltipContext from '../context/TooltipContext';
 import DataContext from '../context/DataContext';
 import { TooltipContextType } from '../types';
 import getScaleBandwidth from '../utils/getScaleBandwidth';
+import isValidNumber from '../typeguards/isValidNumber';
 
 /** fontSize + lineHeight from default styles break precise location of crosshair, etc. */
 const TOOLTIP_NO_STYLE: React.CSSProperties = {
@@ -93,7 +94,7 @@ export default function Tooltip<Datum extends object>({
   const { colorScale, theme, innerHeight, innerWidth, margin, xScale, yScale, dataRegistry } =
     useContext(DataContext) || {};
   const tooltipContext = useContext(TooltipContext) as TooltipContextType<Datum>;
-  const { containerRef, TooltipInPortal } = useTooltipInPortal({
+  const { containerRef, TooltipInPortal, forceRefreshBounds } = useTooltipInPortal({
     debounce,
     detectBounds,
     polyfill: resizeObserverPolyfill,
@@ -114,6 +115,19 @@ export default function Tooltip<Datum extends object>({
     : null;
 
   const showTooltip = tooltipContext?.tooltipOpen && tooltipContent != null;
+
+  // useTooltipInPortal is powered by react-use-measure and will update portal positions upon
+  // resize and page scroll. however it **cannot** detect when a chart container moves on a
+  // page due to animation or drag-and-drop, etc.
+  // therefore we force refresh the bounds any time we transition from a hidden tooltip to
+  // one that is visible.
+  const lastShowTooltip = useRef(false);
+  useEffect(() => {
+    if (showTooltip && !lastShowTooltip.current) {
+      forceRefreshBounds();
+    }
+    lastShowTooltip.current = showTooltip;
+  }, [showTooltip, forceRefreshBounds]);
 
   let tooltipLeft = tooltipContext?.tooltipLeft;
   let tooltipTop = tooltipContext?.tooltipTop;
@@ -145,8 +159,8 @@ export default function Tooltip<Datum extends object>({
   // snap x- or y-coord to the actual data point (not event coordinates)
   if (showTooltip && nearestDatum && (snapTooltipToDatumX || snapTooltipToDatumY)) {
     const { left, top } = getDatumLeftTop(nearestDatumKey, nearestDatum.datum);
-    tooltipLeft = snapTooltipToDatumX ? left : tooltipLeft;
-    tooltipTop = snapTooltipToDatumY ? top : tooltipTop;
+    tooltipLeft = snapTooltipToDatumX && isValidNumber(left) ? left : tooltipLeft;
+    tooltipTop = snapTooltipToDatumY && isValidNumber(top) ? top : tooltipTop;
   }
 
   // collect positions + styles for glyphs; glyphs always snap to Datum, not event coords
@@ -160,9 +174,13 @@ export default function Tooltip<Datum extends object>({
       Object.values(tooltipContext?.tooltipData?.datumByKey ?? {}).forEach(({ key, datum }) => {
         const color = colorScale?.(key) ?? theme?.htmlLabel?.color ?? '#222';
         const { left, top } = getDatumLeftTop(key, datum);
+
+        // don't show glyphs if coords are unavailable
+        if (!isValidNumber(left) || !isValidNumber(top)) return;
+
         glyphProps.push({
-          left: left == null ? left : left - radius - strokeWidth,
-          top: top == null ? top : top - radius - strokeWidth,
+          left: left - radius - strokeWidth,
+          top: top - radius - strokeWidth,
           fill: color,
           stroke: theme?.backgroundColor,
           strokeWidth,
